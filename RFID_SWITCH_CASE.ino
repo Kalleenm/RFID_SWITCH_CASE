@@ -167,30 +167,25 @@ void loop()
   {
     /////////////////// IDLE mode, RFID scanner looking for tags.
     case S_IDLE:
-      for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
-        // Check if there are any new ID card in front of the sensor
-        if ( mfrc522[reader].PICC_IsNewCardPresent() && mfrc522[reader].PICC_ReadCardSerial())
-        {
-          // We store the read ID into 4 bytes with a for loop
-          for (byte i = 0; i < mfrc522[reader].uid.size; i++)
-          {
-            ActualUID[i] = mfrc522[reader].uid.uidByte[i];
-          }
-          currentState = S_COMPARE_TAG;
-        }
+      idleLCDState();
+      getCardInfo();
+      currentState = S_COMPARE_TAG;
       break;
 
     /////////////////// Checks if the scanned tag is stored. Or else access denied
     case S_COMPARE_TAG:
       compareTags();
+      Serial.println(cardRecognized);
       if (cardRecognized)
       {
-        startTimer(15000);
+        startTimer(10000);
+        //printAccessGranted();
         currentState = S_ACCESS_GRANTED;
       }
       else
       {
         startTimer(3000);
+        printAccessDenied();
         currentState = S_ACCESS_DENIED;
       }
       break;
@@ -198,42 +193,46 @@ void loop()
 
     /////////////////// access granted to user.
     case S_ACCESS_GRANTED:
-      printAccessGranted(user);
-      if (timerHasExpired)
+      if (newUserMode == false) {
+        printAccessGranted();
+        Serial.println("lul");
+      }
+
+      if (timerHasExpired())
       {
         currentState = S_IDLE;
         setPhase(5);
-      } else if (newUserMode)
+        Serial.println("start");
+      } else if (!timerHasExpired() && newUserMode)
       {
+        Serial.println("stop");
         startTimer(6000);
+        delay(2000);
+        ActualUID = {0x00, 0x00, 0x00, 0x00} ;
+        getCardInfo();
+        addUser();
+        //countdown();
         currentState = S_ADD_NEW_USER;
       }
       break;
 
     ////////////////// Scanned tag where not recognized, access denied to user.
     case S_ACCESS_DENIED:
-      printAccessDenied();
-
-      if (timerHasExpired)
+      if (timerHasExpired())
       {
+        setPhase(5);
         currentState = S_IDLE;
-        break;
       }
-
+      break;
 
     /////////////////// Mastercard scanned twice, new user mode activated.
     case S_ADD_NEW_USER:
-      countdown();
-      if (newUserMode)
-      {
-        addUser();
-      }
-      else if (timerHasExpired)
+      if (timerHasExpired())
       {
         currentState = S_IDLE;
         counter = 0;
-        break;
       }
+      break;
   }
 
 }
@@ -342,6 +341,7 @@ void printAddedUser(int user, byte USER[])
   USER[2] = ActualUID[2];
   USER[3] = ActualUID[3];
   user_added = user_added + 1;
+  newUserMode = false;
   lcd.setCursor(0, 0);
   lcd.print("New user stored ");
   lcd.setCursor(0, 1);
@@ -352,10 +352,11 @@ void printAddedUser(int user, byte USER[])
   Serial.print("New user stored as USER ");
   Serial.print(user);
   Serial.println("");
+
 }
 
 //////////////////////////////// Print Access to LCD  //////////////////////////////////
-void printAccessGranted(int user)
+void printAccessGranted()
 {
   if (user == 1)
   {
@@ -490,7 +491,8 @@ void printAccessDenied()
   cardRecognized = false;
   Serial.println("Last use: UNKNOWN ID, Access DENIED");
   setPhase(2);
-  idleLCDState();
+  delay(3000);
+  //idleLCDState();
 }
 
 /**
@@ -523,4 +525,18 @@ boolean timerHasExpired()
 void startTimer(unsigned long duration)
 {
   nextTimeout = millis() + duration;
+}
+
+void getCardInfo()
+{
+  for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
+    // Check if there are any new ID card in front of the sensor
+    if ( mfrc522[reader].PICC_IsNewCardPresent() && mfrc522[reader].PICC_ReadCardSerial())
+    {
+      // We store the read ID into 4 bytes with a for loop
+      for (byte i = 0; i < mfrc522[reader].uid.size; i++)
+      {
+        ActualUID[i] = mfrc522[reader].uid.uidByte[i];
+      }
+    }
 }
