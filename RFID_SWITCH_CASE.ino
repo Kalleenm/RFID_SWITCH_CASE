@@ -163,107 +163,113 @@ byte USER5[4] = {0x00, 0x00, 0x00, 0x00} ; //Empty ID of USER5
 void loop()
 {
 
+  switch (currentState)
   {
-    switch (currentState)
-    {
-      /////////////////// IDLE mode, RFID scanner looking for tags.
-      case S_IDLE:
-        for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
-          // Check if there are any new ID card in front of the sensor
-          if ( mfrc522[reader].PICC_IsNewCardPresent() && mfrc522[reader].PICC_ReadCardSerial())
+    /////////////////// IDLE mode, RFID scanner looking for tags.
+    case S_IDLE:
+      for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
+        // Check if there are any new ID card in front of the sensor
+        if ( mfrc522[reader].PICC_IsNewCardPresent() && mfrc522[reader].PICC_ReadCardSerial())
+        {
+          // We store the read ID into 4 bytes with a for loop
+          for (byte i = 0; i < mfrc522[reader].uid.size; i++)
           {
-            // We store the read ID into 4 bytes with a for loop
-            for (byte i = 0; i < mfrc522[reader].uid.size; i++)
-            {
-              ActualUID[i] = mfrc522[reader].uid.uidByte[i];
-            }
-            currentState = S_COMPARE_TAG;
+            ActualUID[i] = mfrc522[reader].uid.uidByte[i];
           }
-        break;
-
-      case S_COMPARE_TAG:
-        compareTags();
-        if (cardRecognized)
-        {
-          currentState = S_ACCESS_GRANTED;
+          currentState = S_COMPARE_TAG;
         }
-        else
-        {
-          currentState = S_ACCESS_DENIED;
-        }
-        break;
+      break;
 
-
-      /////////////////// Scanned tag where stored, access granted to user.
-      case S_ACCESS_GRANTED:
-        printAccessGranted(user);
-        if (timerHasExpired)
-        {
-          currentState = S_IDLE;
-          setPhase(5);
-        } else if (newUserMode)
-        {
-          currentState = S_ADD_NEW_USER;
-          startTimer(15000);
-        }
-        break;
-
-      /////////////////// Scanned tag where not recognized, access denied to user.
-      case S_ACCESS_DENIED:
+    /////////////////// Checks if the scanned tag is stored. Or else access denied
+    case S_COMPARE_TAG:
+      compareTags();
+      if (cardRecognized)
+      {
+        startTimer(15000);
+        currentState = S_ACCESS_GRANTED;
+      }
+      else
+      {
         startTimer(3000);
-        printAccessDenied();
-        if (timerHasExpired)
-        {
-          currentState = S_IDLE;
-        }
-        break;
-
-      /////////////////// Mastercard scanned twice, new user mode activated.
-      case S_ADD_NEW_USER:
-          startTimer(6000);
-          countdown();
-          if (newUserMode)
-        {
-          addUser();
-          }
-          else if (timerHasExpired)
-        {
-          currentState = S_IDLE;
-        }
-      counter = 0;
+        currentState = S_ACCESS_DENIED;
+      }
       break;
 
 
+    /////////////////// access granted to user.
+    case S_ACCESS_GRANTED:
+      printAccessGranted(user);
+      if (timerHasExpired)
+      {
+        currentState = S_IDLE;
+        setPhase(5);
+      } else if (newUserMode)
+      {
+        startTimer(6000);
+        currentState = S_ADD_NEW_USER;
+      }
+      break;
+
+    ////////////////// Scanned tag where not recognized, access denied to user.
+    case S_ACCESS_DENIED:
+      printAccessDenied();
+
+      if (timerHasExpired)
+      {
+        currentState = S_IDLE;
+        break;
+      }
+
+
+    /////////////////// Mastercard scanned twice, new user mode activated.
+    case S_ADD_NEW_USER:
+      countdown();
+      if (newUserMode)
+      {
+        addUser();
+      }
+      else if (timerHasExpired)
+      {
+        currentState = S_IDLE;
+        counter = 0;
+        break;
+      }
   }
-}
+
 }
 
 bool compareTags()
 {
+  cardRecognized = false;
   if (compareArray(ActualUID, USER1))
   {
     user = 1;
     cardRecognized = true;
+    Serial.println("Test - ActualUID = MasterCard");
   }
   else if (compareArray(ActualUID, USER2))
   {
     user = 2;
     cardRecognized = true;
+    Serial.println("Test - USER2");
   }
   else if (compareArray(ActualUID, USER3))
   {
     user = 3;
     cardRecognized = true;
+    Serial.println("Test -USER3");
   }
   else if (compareArray(ActualUID, USER4))
   {
     user = 4;
     cardRecognized = true;
+    Serial.println("Test - USER4");
   }
   else if (compareArray(ActualUID, USER5))
   {
     user = 5;
     cardRecognized = true;
+    Serial.println("Test - USER5");
   }
   return cardRecognized;
 }
@@ -482,9 +488,9 @@ void printAccessDenied()
   lcd.setCursor(0, 1);
   lcd.print("   UNKNOWN ID   ");
   cardRecognized = false;
+  Serial.println("Last use: UNKNOWN ID, Access DENIED");
   setPhase(2);
   idleLCDState();
-  Serial.println("Last use: UNKNOWN ID, Access DENIED");
 }
 
 /**
