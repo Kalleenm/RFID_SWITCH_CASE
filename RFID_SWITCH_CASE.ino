@@ -99,7 +99,6 @@ const bool PLS_SIGNAL = 8;
 
 //Variables
 boolean cardRecognized = false;
-int timer = 0;
 int user_added = 0;
 
 unsigned long nextTimeout = 0;
@@ -114,11 +113,17 @@ const int S_ACCESS_GRANTED = 2;
 const int S_ACCESS_DENIED = 3;
 const int S_ADD_NEW_USER = 4;
 
+//Constants representing the phases for the lights
+const int P_GREEN_LIGHT = 0;
+const int P_RED_LIGHT = 1;
+const int P_IDLE_LIGHTS = 2;
+
 // A variable holding the current state
 int currentState = S_IDLE;
 int counter = 0;
 bool newUserMode = false;
 int user = 0;
+boolean secondRead = false;
 
 void setup()
 {
@@ -141,15 +146,16 @@ void setup()
 
   //Config of the LCD screen
   lcd.begin(16, 2);
-  idleLCDState();
 
   //Config of the LEDS
-  setPhase(5);
+  setPhase(P_IDLE_LIGHTS);
 
 }
 
 
 byte ActualUID[4];                         //This will store the ID each time we read a new ID code
+
+byte NewUserUID[4];                            //This will store the ID for the user to add.
 
 byte USER1[4] = {0x77, 0x5A, 0x63, 0x3C} ; //Master ID code Change it for yor tag. First use the READ exampel and check your ID
 
@@ -167,9 +173,13 @@ void loop()
   {
     /////////////////// IDLE mode, RFID scanner looking for tags.
     case S_IDLE:
+      setPhase(P_IDLE_LIGHTS);
       idleLCDState();
       getCardInfo();
-      currentState = S_COMPARE_TAG;
+      if(getCardInfo())
+      {
+      changeStateTo(S_COMPARE_TAG);
+      }
       break;
 
     /////////////////// Checks if the scanned tag is stored. Or else access denied
@@ -179,14 +189,15 @@ void loop()
       if (cardRecognized)
       {
         startTimer(10000);
-        //printAccessGranted();
-        currentState = S_ACCESS_GRANTED;
+        cardRecognized = false;
+        changeStateTo(S_ACCESS_GRANTED);
+        
       }
-      else
+      else if (!cardRecognized)
       {
         startTimer(3000);
         printAccessDenied();
-        currentState = S_ACCESS_DENIED;
+        changeStateTo(S_ACCESS_DENIED);
       }
       break;
 
@@ -197,22 +208,23 @@ void loop()
         printAccessGranted();
         Serial.println("lul");
       }
-
-      if (timerHasExpired())
+      else if (timerHasExpired())
       {
-        currentState = S_IDLE;
-        setPhase(5);
+        changeStateTo(S_IDLE);
         Serial.println("start");
-      } else if (!timerHasExpired() && newUserMode)
+      } 
+      else if (!timerHasExpired() && newUserMode)
       {
         Serial.println("stop");
         startTimer(6000);
-        delay(2000);
-        ActualUID = {0x00, 0x00, 0x00, 0x00} ;
-        getCardInfo();
+        compareTags();
+        getNewUserInfo();
+        if (!cardRecognized)
+        {
         addUser();
-        //countdown();
-        currentState = S_ADD_NEW_USER;
+        countdown();
+        changeStateTo(S_ADD_NEW_USER);
+        }
       }
       break;
 
@@ -220,8 +232,7 @@ void loop()
     case S_ACCESS_DENIED:
       if (timerHasExpired())
       {
-        setPhase(5);
-        currentState = S_IDLE;
+        changeStateTo(S_IDLE);
       }
       break;
 
@@ -229,94 +240,116 @@ void loop()
     case S_ADD_NEW_USER:
       if (timerHasExpired())
       {
-        currentState = S_IDLE;
+        changeStateTo(S_IDLE);
         counter = 0;
       }
       break;
   }
 
 }
-
-bool compareTags()
-{
-  cardRecognized = false;
-  if (compareArray(ActualUID, USER1))
-  {
-    user = 1;
-    cardRecognized = true;
-    Serial.println("Test - ActualUID = MasterCard");
-  }
-  else if (compareArray(ActualUID, USER2))
-  {
-    user = 2;
-    cardRecognized = true;
-    Serial.println("Test - USER2");
-  }
-  else if (compareArray(ActualUID, USER3))
-  {
-    user = 3;
-    cardRecognized = true;
-    Serial.println("Test -USER3");
-  }
-  else if (compareArray(ActualUID, USER4))
-  {
-    user = 4;
-    cardRecognized = true;
-    Serial.println("Test - USER4");
-  }
-  else if (compareArray(ActualUID, USER5))
-  {
-    user = 5;
-    cardRecognized = true;
-    Serial.println("Test - USER5");
-  }
-  return cardRecognized;
-}
-
+////////////////////////////////////////////////END OF LOOP
+  /**
+   * Sets the lights according to the phase provided.
+   * Phase 1: Green led only, Access granted
+   * Phase 2: Red led only, Access denied
+   * Phase 3: Both leds off, idle mode
+   * 
+   * @param phase The phase to use to set the pattern of the LED's accordingly
+   */
 void setPhase (int phase)
 {
   switch (phase)
   {
-    case 1: // ACCESS GRANTED
+    case P_GREEN_LIGHT: // ACCESS GRANTED
       digitalWrite(RED_LED, LOW);      // Make sure red LED is off
       digitalWrite(GREEN_LED, HIGH);   // Make sure green LED is on
       digitalWrite(PLS_SIGNAL, HIGH);  // Make sure PLS signal is high
       break;
 
-    case 2: // ACCESS DENIED
+    case P_RED_LIGHT: // ACCESS DENIED
       digitalWrite(RED_LED, HIGH);     // Make sure red LED is on
       digitalWrite(GREEN_LED, LOW);    // Make sure green LED is off
       digitalWrite(PLS_SIGNAL, LOW);   // Make sure PLS signal is low
       break;
 
-    case 3: // NEW USER ADDED
-      digitalWrite(RED_LED, LOW);      // Make sure red LED is on
-      digitalWrite(GREEN_LED, HIGH);   // Make sure green LED is off
-      digitalWrite(PLS_SIGNAL, LOW);   // Make sure PLS signal is low
-      break;
-
-    case 4: // NEW USER CANCELED
-      digitalWrite(RED_LED, HIGH);     // Make sure red LED is on
-      digitalWrite(GREEN_LED, LOW);    // Make sure green LED is off
-      digitalWrite(PLS_SIGNAL, LOW);   // Make sure PLS signal is low
-      break;
-
-    case 5: // IDLE MODE
-      digitalWrite(RED_LED, LOW);     // Make sure red LED is off
+    case P_IDLE_LIGHTS: // IDLE MODE
+      digitalWrite(RED_LED, LOW);      // Make sure red LED is off
       digitalWrite(GREEN_LED, LOW);    // Make sure green LED is off
       digitalWrite(PLS_SIGNAL, LOW);   // Make sure PLS signal is low
       break;
 
     default:
-
+      digitalWrite(RED_LED, HIGH);     // Make sure red LED is on
+      digitalWrite(GREEN_LED, HIGH);   // Make sure green LED is on
+      digitalWrite(PLS_SIGNAL, LOW);   // Make sure PLS signal is low
       break;
 
   }
 }
 
+/**
+   Prints the state to Serial Monitor as a text, based
+   on the state-constant provided as the parameter state
+
+   @param state The state to print the tekst-representation for
+*/
+void printState(int state)
+{
+  switch (state)
+  {
+    case S_IDLE:
+      Serial.print("S_IDLE");
+      break;
+
+    case S_COMPARE_TAG:
+      Serial.print("S_COMPARE_TAG");
+      break;
+
+    case S_ACCESS_GRANTED:
+      Serial.print("S_ACCESS_GRANTED");
+      break;
+
+    case S_ACCESS_DENIED:
+      Serial.print("S_ACCESS_DENIED");
+      break;
+
+    case S_ADD_NEW_USER:
+      Serial.print("S_ADD_NEW_USER");
+      break;
+
+    default:
+      Serial.print("!!UNKNOWN!!");
+      break;
+  }
+}
+
+/**
+  Change the state of the statemachine to the new state
+  given by the parameter newState
+
+  @param newState The new state to set the statemachine to
+*/
+void changeStateTo(int newState)
+{
+  // At this point, we now what the current state is (the value
+  // of the global variable currentState), and we know what the
+  // next state is going to be, given by the parameter newState.
+  // By using the printState()-funksjon, we can now print the
+  // full debug-message:
+  Serial.print("State changed from ");
+  printState(currentState);
+  Serial.print(" to ");
+  printState(newState);
+  Serial.println(); // To add a new line feed
+
+  // And finally, set the current state to the new state
+  currentState = newState;
+}
+
 //////////////////////////////// Print idle LCD state  /////////////////////////////////
 void idleLCDState()
 {
+  lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Scan card to be");
   lcd.setCursor(0, 1);
@@ -336,10 +369,10 @@ boolean compareArray(byte array1[], byte array2[])
 ////////////////////////////// Print added user to LCD /////////////////////////////////
 void printAddedUser(int user, byte USER[])
 {
-  USER[0] = ActualUID[0];
-  USER[1] = ActualUID[1];
-  USER[2] = ActualUID[2];
-  USER[3] = ActualUID[3];
+  USER[0] = NewUserUID[0];
+  USER[1] = NewUserUID[1];
+  USER[2] = NewUserUID[2];
+  USER[3] = NewUserUID[3];
   user_added = user_added + 1;
   newUserMode = false;
   lcd.setCursor(0, 0);
@@ -348,11 +381,6 @@ void printAddedUser(int user, byte USER[])
   lcd.print("   as  USER ");
   lcd.print(user);
   delay(3000);
-  idleLCDState();
-  Serial.print("New user stored as USER ");
-  Serial.print(user);
-  Serial.println("");
-
 }
 
 //////////////////////////////// Print Access to LCD  //////////////////////////////////
@@ -365,9 +393,9 @@ void printAccessGranted()
     lcd.setCursor(0, 1);
     lcd.print("  MASTER  USER  ");
     Serial.println("Last use: MASTER CARD");
-    setPhase (1);
+    setPhase (P_GREEN_LIGHT);
     delay(2000);
-    setPhase (5);
+    setPhase (P_IDLE_LIGHTS);
     lcd.setCursor(0, 0);
     lcd.print("Scan MASTERCARD");
     lcd.setCursor(0, 1);
@@ -382,11 +410,9 @@ void printAccessGranted()
     lcd.setCursor(5, 1);
     lcd.print("USER ");
     lcd.print(user);
-    setPhase (1);
-    idleLCDState();
-    Serial.print("Last use: USER");
-    Serial.print(user);
-    Serial.println("");
+    setPhase (P_GREEN_LIGHT);
+    delay(2000);
+    setPhase (P_IDLE_LIGHTS);
   }
 }
 
@@ -446,7 +472,6 @@ void countdown()
     lcd.setCursor(0, 1);
     lcd.print("                ");
     delay(3000);
-    idleLCDState();
   }
 
   if (counter == 50)
@@ -490,9 +515,8 @@ void printAccessDenied()
   lcd.print("   UNKNOWN ID   ");
   cardRecognized = false;
   Serial.println("Last use: UNKNOWN ID, Access DENIED");
-  setPhase(2);
+  setPhase(P_RED_LIGHT);
   delay(3000);
-  //idleLCDState();
 }
 
 /**
@@ -527,7 +551,7 @@ void startTimer(unsigned long duration)
   nextTimeout = millis() + duration;
 }
 
-void getCardInfo()
+boolean getCardInfo()
 {
   for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
     // Check if there are any new ID card in front of the sensor
@@ -538,5 +562,68 @@ void getCardInfo()
       {
         ActualUID[i] = mfrc522[reader].uid.uidByte[i];
       }
+      return true;
+      mfrc522[reader].PICC_HaltA();
     }
+}
+
+void getNewUserInfo()
+{ 
+  for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
+    // Check if there are any new ID card in front of the sensor
+    if ( mfrc522[reader].PICC_IsNewCardPresent() && mfrc522[reader].PICC_ReadCardSerial())
+    {
+      // We store the read ID into 4 bytes with a for loop
+      for (byte i = 0; i < mfrc522[reader].uid.size; i++)
+      {
+        NewUserUID [i] = mfrc522[reader].uid.uidByte[i];
+      }
+      
+    }
+    
+}
+
+void resetScan ()
+{
+  for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
+    // Check if there are any new ID card in front of the sensor
+  if ( ! mfrc522[reader].PICC_IsNewCardPresent() && ! mfrc522[reader].PICC_ReadCardSerial()) { //If a new Tag placed to RFID reader continue
+    return 0;
+  } 
+}
+
+bool compareTags()
+{
+  cardRecognized = false;
+  if (compareArray(ActualUID, USER1))
+  {
+    user = 1;
+    cardRecognized = true;
+    Serial.println("Test - ActualUID = MasterCard");
+  }
+  if (compareArray(ActualUID, USER2))
+  {
+    user = 2;
+    cardRecognized = true;
+    Serial.println("Test - USER2");
+  }
+  if (compareArray(ActualUID, USER3))
+  {
+    user = 3;
+    cardRecognized = true;
+    Serial.println("Test -USER3");
+  }
+  if (compareArray(ActualUID, USER4))
+  {
+    user = 4;
+    cardRecognized = true;
+    Serial.println("Test - USER4");
+  }
+  if (compareArray(ActualUID, USER5))
+  {
+    user = 5;
+    cardRecognized = true;
+    Serial.println("Test - USER5");
+  }
+  return cardRecognized;
 }
