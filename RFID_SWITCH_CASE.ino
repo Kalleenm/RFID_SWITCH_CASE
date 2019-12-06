@@ -164,17 +164,12 @@ void loop()
 
   switch (currentState)
   {
-      Serial.println("Start of loop");
-      Serial.println(currentState);
     /////////////////// IDLE mode, RFID scanner looking for tags.
     case S_IDLE:
-    Serial.println(currentState);
       setPhase(P_IDLE_LIGHTS);
       idleLCDState();
-      //Serial.println(isCardPresent());
-      //delay(2000);
-      if (isCardPresent()) {
-        Serial.println("Test- If loop");
+      if (isCardPresent()) 
+      {
         getCardInfo();
         changeStateTo(S_COMPARE_TAG);
       }
@@ -182,36 +177,30 @@ void loop()
 
     /////////////////// Checks if the scanned tag is stored. Or else access denied
     case S_COMPARE_TAG:
-    Serial.println(currentState+1);
       bool isActualUser = compareTags();
       Serial.println(isActualUser);
       if (isActualUser)
       {
-        Serial.println(isActualUser);
         startTimer(5000);
         changeStateTo(S_ACCESS_GRANTED);
       }
       else
       {
         startTimer(3000);
-        Serial.println("Test denied");
         changeStateTo(S_ACCESS_DENIED);
         break;
       }
       break;
 
-
     /////////////////// access granted to user.
     case S_ACCESS_GRANTED:
-    Serial.println(currentState+2);
-      Serial.println("lul");
-      if (newUserMode == false) {
+      if (newUserMode == false)
+      {
         printAccessGranted();
       }
       if (user == 1) {
-        if (newUserMode == false) {
-          Serial.println("lul");
-          newUserMode = true;
+        if (newUserMode == false) 
+        {
           changeStateTo(S_IDLE);
         }
       }
@@ -220,12 +209,11 @@ void loop()
         newUserMode = false;
         printCanceledNewUser();
         changeStateTo(S_IDLE);
-        Serial.println("Timed out, going back to idle (from access granted)");
       }
       else if (newUserMode)
       {
-        if (user != 1) {
-          Serial.println("Adding user");
+        if (user != 1) 
+        {
           delay(1000);
           getCardInfo();
           startTimer(6000);
@@ -236,7 +224,6 @@ void loop()
 
     ////////////////// Scanned tag where not recognized, access denied to user.
     case S_ACCESS_DENIED:
-      Serial.println("tester 4000000");
       printAccessDenied();
       setPhase(P_RED_LIGHT);
       delay(3000);
@@ -245,9 +232,9 @@ void loop()
 
     /////////////////// Mastercard scanned twice, new user mode activated.
     case S_ADD_NEW_USER:
-    Serial.println(currentState+3);
       byte userToAdd = checkWhichUser();
-      if (userToAdd == NULL) {
+      if (userToAdd == NULL) 
+      {
         printListFull();
         changeStateTo(S_IDLE);
       }
@@ -259,7 +246,12 @@ void loop()
   }
   delay(10);
 }
+
 ////////////////////////////////////////////////END OF LOOP
+
+
+///////////////////////////////////// FUNCTIONS ////////////////////////////////////////
+
 /**
    Sets the lights according to the phase provided.
    Phase 1: Green led only, Access granted
@@ -387,7 +379,7 @@ boolean compareArray(byte array1[], byte array2[])
   return true;
 }
 
-////////////////////////////// Print added user to LCD /////////////////////////////////
+////////////////////////////////// Add user to Arduino /// /////////////////////////////////
 void addUser(byte USER[])
 {
   USER[0] = cardInfo[0];
@@ -397,7 +389,7 @@ void addUser(byte USER[])
   userToAdd = userToAdd + 1;
 }
 
-
+///////////////////////// Print added user canceld to LCD /////////////////////////////////
 void printCanceledNewUser() {
   lcd.setCursor(0, 0);
   lcd.print("New user");
@@ -406,6 +398,7 @@ void printCanceledNewUser() {
   delay(3000);
 }
 
+////////////////////////////// Print added user to LCD /////////////////////////////////
 void printAddedUser() {
   lcd.setCursor(0, 0);
   lcd.print("New user stored ");
@@ -444,7 +437,26 @@ void printAccessGranted()
   }
 }
 
-///////////////////////////////////// FUNCTIONS ////////////////////////////////////////
+///////////////////////////// Print list is full to LCD  /////////////////////////////
+void printListFull() {
+  lcd.setCursor(0, 0);
+  lcd.print("  User list is  ");
+  lcd.setCursor(0, 1);
+  lcd.print("      FULL      ");
+  idleLCDState();
+  Serial.println("Last action: User list is full.");
+}
+
+//////////////////////////// Print Access denied to LCD  ///////////////////////////////
+void printAccessDenied()
+{
+  lcd.setCursor(0, 0);
+  lcd.print(" Access  denied ");
+  lcd.setCursor(0, 1);
+  lcd.print("   UNKNOWN ID   ");
+  Serial.println("Last use: UNKNOWN ID, Access DENIED");
+}
+
 /**
   Helper routine to dump a byte array as hex values to Serial.
 */
@@ -455,7 +467,7 @@ void dump_byte_array(byte * buffer, byte bufferSize) {
   }
 }
 
-
+///////////////////////////////// Check which user ////////////////////////////////////
 byte checkWhichUser()
 {
   //Compare the read ID and the stored USERS
@@ -479,25 +491,6 @@ byte checkWhichUser()
   {
     return NULL;
   }
-}
-
-void printListFull() {
-  lcd.setCursor(0, 0);
-  lcd.print("  User list is  ");
-  lcd.setCursor(0, 1);
-  lcd.print("      FULL      ");
-  idleLCDState();
-  Serial.println("Last action: User list is full.");
-}
-
-void printAccessDenied()
-{
-  lcd.setCursor(0, 0);
-  lcd.print(" Access  denied ");
-  lcd.setCursor(0, 1);
-  lcd.print("   UNKNOWN ID   ");
-  Serial.println("Last use: UNKNOWN ID, Access DENIED");
-
 }
 
 /**
@@ -532,6 +525,7 @@ void startTimer(unsigned long duration)
   nextTimeout = millis() + duration;
 }
 
+//////////////////////////// Get the  info from the card ////////////////////////////////
 void getCardInfo()
 {
   for (uint8_t reader = 0; reader < NR_OF_READERS; reader++) {
@@ -547,7 +541,9 @@ void getCardInfo()
   }
 }
 
-boolean isCardPresent() {
+///////////////////////////// Check if card is present /////////////////////////////////
+boolean isCardPresent() 
+{
   for (uint8_t reader = 0; reader < NR_OF_READERS; reader++) {
     if (! mfrc522[reader].PICC_IsNewCardPresent())
     {
@@ -560,16 +556,7 @@ boolean isCardPresent() {
   }
 }
 
-
-void resetScan ()
-{
-  for (uint8_t reader = 0; reader < NR_OF_READERS; reader++)
-    // Check if there are any new ID card in front of the sensor
-    if ( ! mfrc522[reader].PICC_IsNewCardPresent() && ! mfrc522[reader].PICC_ReadCardSerial()) { //If a new Tag placed to RFID reader continue
-      return 0;
-    }
-}
-
+////////////////////// Compares the tags, checks if any is stored /////////////////////////
 bool compareTags()
 {
   cardRecognized = false;
