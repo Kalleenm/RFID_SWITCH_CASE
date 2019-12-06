@@ -164,9 +164,11 @@ void loop()
 
   switch (currentState)
   {
-    Serial.println(currentState);
+      Serial.println("Start of loop");
+      Serial.println(currentState);
     /////////////////// IDLE mode, RFID scanner looking for tags.
     case S_IDLE:
+    Serial.println(currentState);
       setPhase(P_IDLE_LIGHTS);
       idleLCDState();
       //Serial.println(isCardPresent());
@@ -180,7 +182,8 @@ void loop()
 
     /////////////////// Checks if the scanned tag is stored. Or else access denied
     case S_COMPARE_TAG:
-      bool isActualUser = compareTags(cardInfo);
+    Serial.println(currentState+1);
+      bool isActualUser = compareTags();
       Serial.println(isActualUser);
       if (isActualUser)
       {
@@ -193,16 +196,15 @@ void loop()
         startTimer(3000);
         Serial.println("Test denied");
         changeStateTo(S_ACCESS_DENIED);
+        break;
       }
-      Serial.println("lul");
-      Serial.println(currentState);
-      
       break;
 
 
     /////////////////// access granted to user.
     case S_ACCESS_GRANTED:
-    Serial.println("lul");
+    Serial.println(currentState+2);
+      Serial.println("lul");
       if (newUserMode == false) {
         printAccessGranted();
       }
@@ -234,7 +236,7 @@ void loop()
 
     ////////////////// Scanned tag where not recognized, access denied to user.
     case S_ACCESS_DENIED:
-    Serial.println("tester 4000000");
+      Serial.println("tester 4000000");
       printAccessDenied();
       setPhase(P_RED_LIGHT);
       delay(3000);
@@ -243,6 +245,7 @@ void loop()
 
     /////////////////// Mastercard scanned twice, new user mode activated.
     case S_ADD_NEW_USER:
+    Serial.println(currentState+3);
       byte userToAdd = checkWhichUser();
       if (userToAdd == NULL) {
         printListFull();
@@ -254,7 +257,7 @@ void loop()
       changeStateTo(S_IDLE);
       break;
   }
-
+  delay(10);
 }
 ////////////////////////////////////////////////END OF LOOP
 /**
@@ -353,14 +356,14 @@ void changeStateTo(int newState)
 
   // And finally, set the current state to the new state
   currentState = newState;
-  Serial.println(currentState); 
+  Serial.println("Stopped Change State To");
 }
 
 //////////////////////////////// Print idle LCD state  /////////////////////////////////
 void idleLCDState()
 {
   lcd.clear();
-  lcd.setCursor(0, 0);
+    lcd.setCursor(0, 0);
   lcd.print("Scan card to be");
   lcd.setCursor(0, 1);
   lcd.print("granted ACCESS!");
@@ -369,11 +372,19 @@ void idleLCDState()
 //////////////// Compare the 4 bytes of the users and the received ID //////////////////
 boolean compareArray(byte array1[], byte array2[])
 {
-  if (array1[0] != array2[0])return (false);
-  if (array1[1] != array2[1])return (false);
-  if (array1[2] != array2[2])return (false);
-  if (array1[3] != array2[3])return (false);
-  return (true);
+  if (array1[0] != array2[0]) {
+    return false;
+  }
+  else if (array1[1] != array2[1]) {
+    return false;
+  }
+  else if (array1[2] != array2[2]) {
+    return false;
+  }
+  else if (array1[3] != array2[3]) {
+    return false;
+  }
+  return true;
 }
 
 ////////////////////////////// Print added user to LCD /////////////////////////////////
@@ -559,36 +570,35 @@ void resetScan ()
     }
 }
 
-bool compareTags(byte cardInfo)
+bool compareTags()
 {
   cardRecognized = false;
-  if (!compareArray(cardInfo, USER1))
+  if (compareArray(cardInfo, USER1))
   {
-    
     user = 1;
     cardRecognized = true;
     Serial.println("Test - ActualUID = MasterCard");
   }
-  else if (!compareArray(cardInfo, USER2))
+  else if (compareArray(cardInfo, USER2))
   {
-     //Serial.println(compareArray(cardInfo, USER2));
+    //Serial.println(compareArray(cardInfo, USER2));
     user = 2;
     cardRecognized = true;
     Serial.println("Test - USER2");
   }
-  else if (!compareArray(cardInfo, USER3))
+  else if (compareArray(cardInfo, USER3))
   {
     user = 3;
     cardRecognized = true;
     Serial.println("Test -USER3");
   }
-  else if (!compareArray(cardInfo, USER4))
+  else if (compareArray(cardInfo, USER4))
   {
     user = 4;
     cardRecognized = true;
     Serial.println("Test - USER4");
   }
-  else if (!compareArray(cardInfo, USER5))
+  else if (compareArray(cardInfo, USER5))
   {
     user = 5;
     cardRecognized = true;
